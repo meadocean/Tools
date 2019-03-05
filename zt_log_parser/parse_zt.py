@@ -3,23 +3,6 @@ import string
 import re
 import sys
 
-SIDE_COMP_SMD_TH = 200
-SIDE_COMP_TOP2_TH = 47
-SIDE_COMP_MAX_TH = 10
-FLAT_COMP_SMD_TH = 193
-FLAT_COMP_TOP2_TH = 54
-FLAT_COMP_MAX_TH = 11
-SIDE_ABS_SMD_TH = 320
-SIDE_ABS_TOP2_TH = 57
-SIDE_ABS_MAX_TH = 16
-FLAT_ABS_SMD_TH = 120
-FLAT_ABS_TOP2_TH = 39
-FLAT_ABS_MAX_TH = 7
-
-FLAT_POS = 1
-SIDE_POS = 2
-MID_POS = 3
-
 lineData=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 
 def parse_raw_line(line, data):
@@ -76,6 +59,15 @@ def parse_rt_state_line(line, data):
         i=i+1
     return i
 
+def parse_sys_state_line(line, data):
+    m=re.findall(r'\d+',line)
+    #print m
+    i=0
+    for val in m:
+        data[i]=int(val,10)
+        i=i+1
+    return i
+
 def is_raw_data_line(line):
     return re.findall(r'RX: R\d+', line)
 
@@ -88,17 +80,20 @@ def is_rt_state_line(line):
 def is_similarity_data_line(line):
     return re.findall(r'RX: & ', line)
 
-def is_same_raw_packet(r1,r2,r3,anaData,similarity,rtState):
-    if len(r1) == 0 or len(r2) == 0 or len(r3) == 0 or len(anaData) == 0 or len(similarity) == 0 or len(rtState) == 0:
+def is_sys_state_data_line(line):
+    return re.findall(r'RX: SS:', line)
+
+def is_same_raw_packet(r1,r2,r3,anaData,similarity,rtState,sysState):
+    if len(r1) == 0 or len(r2) == 0 or len(r3) == 0 or len(anaData) == 0 or len(similarity) == 0 or len(rtState) == 0 or len(sysState) == 0:
         return False
     delta = 0
     for i in range(0,5,1):
-        delta += (r1[i]-r2[i])+(r1[i]-r3[i]+(r1[i]-anaData[i])+(r1[i]-similarity[i])+(r1[i]-rtState[i]))
+        delta += (r1[i]-r2[i])+(r1[i]-r3[i]+(r1[i]-anaData[i])+(r1[i]-similarity[i])+(r1[i]-rtState[i])+(r1[i]-sysState[i]))
     if delta == 0:
         return True
     return False
 
-def print_raw_line(raw, channels, data, date, time, anaData, similarityData, rtState):
+def print_raw_line(raw, channels, data, date, time, anaData, similarityData, rtState, sysState):
     temp = []
     temp += "%s/%s/%s\t%s:%s:%s\t"%(date[0],date[1],date[2],time[0],time[1],time[2])
     for i in range(channels):
@@ -112,14 +107,16 @@ def print_raw_line(raw, channels, data, date, time, anaData, similarityData, rtS
     raw += anaStr
     rtStateStr = "%s\t%s\t%s\t%s\t"%(rtState[7],rtState[8],rtState[9],rtState[6])
     raw += rtStateStr
-    similartyStr = "%s\t%s\t%s\t%s"%(similarityData[6],similarityData[7],similarityData[9],similarityData[10])
+    similartyStr = "%s\t%s\t%s\t%s\t"%(similarityData[6],similarityData[7],similarityData[9],similarityData[10])
     raw += similartyStr
+    sysStateStr = "%s\t%s\t%s\t%s"%(sysState[6],sysState[7],sysState[8],sysState[9])
+    raw += sysStateStr
     raw += "\n"
     return
 
 def write_output(name, data):
     fp = open(name,'w+')
-    fp.write("Date\tTime\tCh0\tCh1\tCh2\tCh3\tCh4\tCh5\tCh6\tCh7\tCh8\tCh9\tCh10\tCh11\tCh12\tCh13\tCh14\tCh15\tMin\tMean\tMax\tTop2\tSME\tHeight\tVoltage\tCharging\tPos\tRT Pos\tNew Pos\tSimilarity\tSimilarity Count\n")
+    fp.write("Date\tTime\tCh0\tCh1\tCh2\tCh3\tCh4\tCh5\tCh6\tCh7\tCh8\tCh9\tCh10\tCh11\tCh12\tCh13\tCh14\tCh15\tMin\tMean\tMax\tTop2\tSME\tHeight\tVoltage\tCharging\tPos\tRT Pos\tNew Pos\tSimilarity\tSimilarity Count\tRT BAR\tAVT BAR\tLowBatt\tAgeTesting\n")
     for line in data:
         fp.write(line)
         #print(str(data[i]))
@@ -137,6 +134,7 @@ Time = []
 anaData = []
 rtState = []
 similarityData = []
+sysState = []
 
 inputFile = open(sys.argv[1],'r')
 lineCount = 0
@@ -166,14 +164,18 @@ for lines in inputFile.readlines():
         parse_similarity_line(lines,lineData)
         similarityData = lineData[:]
         #print similarityData
+    if is_sys_state_data_line(lines):
+        parse_sys_state_line(lines,lineData)
+        sysState = lineData[:]
+        #print sysState
 
-    if is_same_raw_packet(R1,R2,R3,anaData,similarityData,rtState):
+    if is_same_raw_packet(R1,R2,R3,anaData,similarityData,rtState,sysState):
         rawData = R1[7:13]
         rawData += R2[7:13]
         rawData += R3[7:11]
         Date = R1[0:3]
         Time = R1[3:6]
-        print_raw_line(rawOutput, 16, rawData, Date, Time, anaData, similarityData, rtState)
+        print_raw_line(rawOutput, 16, rawData, Date, Time, anaData, similarityData, rtState, sysState)
         rawData = []
         Date = []
         Time = []
